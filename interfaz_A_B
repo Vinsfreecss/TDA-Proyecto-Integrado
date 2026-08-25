@@ -1,35 +1,99 @@
-INTERFAZ FRENTE A → FRENTE B
+# Interfaz Frente A → Frente B
 
-Protocolo:
+## Protocolo
 HTTP
 
-Método:
+## Método
 POST
 
-Endpoint:
+## Endpoint
 /frame
 
-Content-Type:
+## Content-Type
 image/jpeg
 
-Cuerpo:
+## Cuerpo
 Imagen JPEG binaria.
 
-Resolución:
-Variable. Frente B redimensiona internamente
-las imágenes recibidas.
+## Ejemplo de envío
 
-Modo de recepción:
-Continuo. El servidor permanece activo y procesa
-cada imagen enviada por Frente A.
+curl -X POST \
+-H "Content-Type: image/jpeg" \
+--data-binary "@imagen1.jpg" \
+http://192.168.1.X:8000/frame
 
-Respuesta:
+## Resolución
+Variable.
+
+El Frente B acepta imágenes de diferentes tamaños y las redimensiona internamente antes del procesamiento.
+
+## Modo de recepción
+Continuo.
+
+El servidor del Frente B permanece activo y procesa cada imagen enviada por el Frente A.
+
+## Respuesta esperada
 HTTP 200 OK + JSON de detección.
 
-Campos actuales:
+## Respuesta cuando se detecta un gato
+
+{
+  "gato_detectado": true,
+  "gato_x": 0.5203,
+  "gato_y": 0.4916,
+  "velocidad": 0.0,
+  "direccion": "desconocida",
+  "confianza": 0.8187
+}
+
+## Respuesta cuando no se detecta un gato
+
+{
+  "gato_detectado": false,
+  "gato_x": null,
+  "gato_y": null,
+  "velocidad": 0.0,
+  "direccion": "desconocida",
+  "confianza": 0.03
+}
+
+## Campos actuales
+
 - gato_detectado: boolean
-- gato_x: float [0,1]
-- gato_y: float [0,1]
+- gato_x: float [0,1] o null
+- gato_y: float [0,1] o null
 - velocidad: float
 - direccion: string
 - confianza: float [0,1]
+
+## Responsabilidades
+
+### Frente A
+- Capturar imagen JPEG desde la ESP32-CAM.
+- Enviar la imagen mediante HTTP POST a /frame.
+- Recibir la respuesta HTTP.
+- Leer el JSON devuelto para pruebas y depuración.
+
+### Frente B
+- Mantener activo el endpoint /frame.
+- Recibir imágenes JPEG.
+- Redimensionar internamente las imágenes recibidas.
+- Procesar la imagen.
+- Detectar presencia y posición del gato.
+- Devolver el JSON de detección.
+
+## Estado actual
+
+- Prueba PC → Frente B mediante curl: funcionando.
+- Endpoint /frame: funcionando.
+- Respuesta 200 OK: funcionando.
+- JSON de detección: funcionando.
+- Firmware ESP32-CAM: compila correctamente.
+- Prueba física ESP32-CAM → Frente B: pendiente.
+
+## Pendientes
+
+- Validar envío real desde ESP32-CAM.
+- Definir si el JSON se utilizará en Frente A o se enviará directamente al Frente C.
+- Medir latencia real de la comunicación.
+- Verificar reconexión ante pérdida de Wi-Fi.
