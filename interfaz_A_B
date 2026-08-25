@@ -1,0 +1,35 @@
+INTERFAZ FRENTE A → FRENTE B
+
+Protocolo:
+HTTP
+
+Método:
+POST
+
+Endpoint:
+/frame
+
+Content-Type:
+image/jpeg
+
+Cuerpo:
+Imagen JPEG binaria.
+
+Resolución:
+Variable. Frente B redimensiona internamente
+las imágenes recibidas.
+
+Modo de recepción:
+Continuo. El servidor permanece activo y procesa
+cada imagen enviada por Frente A.
+
+Respuesta:
+HTTP 200 OK + JSON de detección.
+
+Campos actuales:
+- gato_detectado: boolean
+- gato_x: float [0,1]
+- gato_y: float [0,1]
+- velocidad: float
+- direccion: string
+- confianza: float [0,1]
