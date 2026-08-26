@@ -60,15 +60,6 @@ Para cada imagen recibida:
    estimar velocidad y dirección.
 8. Se genera un JSON con el resultado.
 
-## Respuesta sin detección
-{
-  "gato_detectado": false,
-  "gato_x": null,
-  "gato_y": null,
-  "velocidad": 0.0,
-  "direccion": "desconocida",
-  "confianza": 0.0
-}
 ## Respuesta con detección
 
 ```json
