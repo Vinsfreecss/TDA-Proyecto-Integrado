@@ -1,0 +1,382 @@
+celda 1
+
+!pip install transformers torch pillow -q
+
+celda 2
+
+from google.colab import files
+subido = files.upload()
+nombre_imagen = list(subido.keys())[0]
+
+celda 3
+
+import numpy as np
+from PIL import Image
+import cv2
+import random
+from transformers import pipeline
+
+SEMILLA_GLOBAL = 42
+random.seed(SEMILLA_GLOBAL)
+np.random.seed(SEMILLA_GLOBAL)
+
+celda 4
+
+segmentador = pipeline(
+    "image-segmentation",
+    model="nvidia/segformer-b0-finetuned-ade-512-512"
+)
+
+imagen = Image.open(nombre_imagen).convert("RGB")
+w, h = imagen.size
+
+resultados = segmentador(imagen)
+
+celda 5
+
+import numpy as np
+from PIL import Image
+import cv2
+from transformers import pipeline
+
+segmentador = pipeline(
+    "image-segmentation",
+    model="nvidia/segformer-b0-finetuned-ade-512-512"
+)
+
+imagen = Image.open(nombre_imagen).convert("RGB")
+w, h = imagen.size
+
+resultados = segmentador(imagen)
+
+celda 6
+
+clases_seguras = ["floor", "flooring", "rug", "carpet"]
+
+# Ahora TODOS los muebles van a precaución (amarillo), no solo sofá/sillas
+clases_precaucion = [
+    "sofa", "couch", "chair"
+]
+
+# Ya no hay clases en "inseguras" — se dejó vacía a propósito
+clases_inseguras = ["armchair", "ottoman", "cushion", "pillow",
+    "table", "coffee table", "cabinet", "shelf", "bookcase", "bed",
+    "painting", "picture", "television", "screen", "plant", "lamp",
+    "mirror", "curtain", "vase", "chest", "wardrobe"]
+
+clases_estructura = ["wall", "ceiling"]
+
+mapa_seguro = np.zeros((h, w), dtype=np.uint8)
+mapa_precaucion = np.zeros((h, w), dtype=np.uint8)
+mapa_inseguro = np.zeros((h, w), dtype=np.uint8)
+mapa_estructura = np.zeros((h, w), dtype=np.uint8)
+
+for r in resultados:
+    etiqueta = r["label"].lower()
+    mascara = np.array(r["mask"]) > 0
+
+    if any(c in etiqueta for c in clases_precaucion):
+        mapa_precaucion[mascara] = 1
+    elif any(c in etiqueta for c in clases_inseguras):
+        mapa_inseguro[mascara] = 1
+    elif any(c in etiqueta for c in clases_estructura):
+        mapa_estructura[mascara] = 1
+    elif any(c in etiqueta for c in clases_seguras):
+        mapa_seguro[mascara] = 1
+
+# PERMITIDO: piso + muebles/sillones (verde + amarillo)
+mapa_permitido = (mapa_seguro == 1).astype(np.uint8)
+mapa_permitido_limitado = (mapa_precaucion == 1).astype(np.uint8)
+mapa_todo_permitido = ((mapa_seguro == 1) | (mapa_precaucion == 1)).astype(np.uint8)
+
+# PROHIBIDO: solo pared/techo (rojo queda sin uso por ahora, disponible para otra categoría futura)
+mapa_prohibido = (mapa_estructura == 1).astype(np.uint8)
+
+celda 7
+
+import cv2
+import numpy as np
+import random
+
+def generar_puntos_por_componente(mapa, min_distancia=25, margen_borde=5,
+                                   puntos_por_area=1/1200, min_puntos_por_objeto=2, seed=42):
+    np.random.seed(seed)
+    random.seed(seed)
+
+    num_labels, etiquetas = cv2.connectedComponents(mapa.astype(np.uint8))
+    todos_los_puntos = []
+
+    for etiqueta_id in range(1, num_labels):  # 0 = fondo
+        componente = (etiquetas == etiqueta_id)
+        area = componente.sum()
+        if area < 50:  # ignora ruido de segmentación
+            continue
+
+        ys, xs = np.where(componente)
+        y_min, y_max = ys.min(), ys.max()
+        x_min, x_max = xs.min(), xs.max()
+
+        n_puntos = max(min_puntos_por_objeto, int(area * puntos_por_area))
+        paso = max(min_distancia, int(np.sqrt(area / n_puntos)))
+
+        candidatos = []
+        for y in range(y_min + margen_borde, y_max - margen_borde, paso):
+            for x in range(x_min + margen_borde, x_max - margen_borde, paso):
+                jx = np.random.randint(-paso // 3, paso // 3 + 1)
+                jy = np.random.randint(-paso // 3, paso // 3 + 1)
+                xj, yj = x + jx, y + jy
+                if 0 <= yj < mapa.shape[0] and 0 <= xj < mapa.shape[1] and componente[yj, xj]:
+                    candidatos.append((xj, yj))
+
+        random.shuffle(candidatos)
+        seleccionados = []
+        for p in candidatos:
+            if len(seleccionados) >= n_puntos:
+                break
+            if all(((p[0]-q[0])**2 + (p[1]-q[1])**2)**0.5 >= min_distancia for q in seleccionados):
+                seleccionados.append(p)
+
+        todos_los_puntos.extend(seleccionados)
+
+    return todos_los_puntos
+
+
+# También dejamos la función simple, para elegir UN punto puntual (inicio/medio/final más adelante)
+def generar_puntos(mapa, num_puntos, distancia_minima=25, margen_borde=10):
+    h, w = mapa.shape
+    puntos = []
+    intentos_max = num_puntos * 50
+    intentos = 0
+
+    while len(puntos) < num_puntos and intentos < intentos_max:
+        intentos += 1
+        x = random.randint(margen_borde, w - margen_borde - 1)
+        y = random.randint(margen_borde, h - margen_borde - 1)
+
+        if mapa[y, x] == 0:
+            continue
+
+        muy_cerca = any(
+            ((x - px)**2 + (y - py)**2) ** 0.5 < distancia_minima
+            for px, py in puntos
+        )
+        if not muy_cerca:
+            puntos.append((x, y))
+
+    return puntos
+
+celda 8
+
+import time
+
+random.seed(int(time.time() * 1000) % 100000)
+np.random.seed(int(time.time() * 1000) % 100000)
+
+TOTAL_PUNTOS = random.randint(10, 28)
+print(f"Esta corrida generará {TOTAL_PUNTOS} puntos en total")
+
+candidatos = generar_puntos_por_componente(
+    mapa_todo_permitido,
+    min_distancia=40,
+    puntos_por_area=1/2000,
+    min_puntos_por_objeto=1,
+    seed=random.randint(0, 99999)
+)
+
+random.shuffle(candidatos)
+puntos_finales = candidatos[:TOTAL_PUNTOS]
+
+puntos_libres = [p for p in puntos_finales if mapa_seguro[p[1], p[0]] == 1]
+puntos_limitados = [p for p in puntos_finales if mapa_precaucion[p[1], p[0]] == 1]
+
+print(f"En piso (verde): {len(puntos_libres)}")
+print(f"En sofá/silla (amarillo): {len(puntos_limitados)}")
+
+celda 9
+
+img_original = cv2.cvtColor(np.array(imagen), cv2.COLOR_RGB2BGR)
+overlay = img_original.copy()
+
+overlay[mapa_estructura == 1] = (255, 0, 0)
+overlay[mapa_seguro == 1] = (0, 255, 0)
+overlay[mapa_precaucion == 1] = (0, 255, 255)
+overlay[mapa_inseguro == 1] = (0, 0, 255)
+
+resultado = cv2.addWeighted(overlay, 0.3, img_original, 0.7, 0)
+
+RADIO_PUNTO = 7          # antes 14 — más pequeños
+GROSOR_BORDE = 2         # antes 3
+
+for i, (x, y) in enumerate(puntos_libres):
+    cv2.circle(resultado, (x, y), RADIO_PUNTO, (255, 255, 255), -1)
+    cv2.circle(resultado, (x, y), RADIO_PUNTO, (0, 0, 0), GROSOR_BORDE)
+    cv2.putText(resultado, str(i), (x - 5, y + 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
+
+for i, (x, y) in enumerate(puntos_limitados):
+    cv2.circle(resultado, (x, y), RADIO_PUNTO, (0, 165, 255), -1)
+    cv2.circle(resultado, (x, y), RADIO_PUNTO, (0, 0, 0), GROSOR_BORDE)
+    cv2.putText(resultado, str(i), (x - 5, y + 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
+
+cv2.imwrite("puntos_separados.jpg", resultado)
+
+from google.colab.patches import cv2_imshow
+cv2_imshow(resultado)
+
+celda 10
+
+COSTO_VERDE = 1
+COSTO_AMARILLO = 15
+COSTO_INFINITO = 999999
+
+mapa_costos = np.full((h, w), COSTO_VERDE, dtype=np.int32)
+mapa_costos[mapa_precaucion == 1] = COSTO_AMARILLO
+mapa_costos[mapa_inseguro == 1] = COSTO_INFINITO
+mapa_costos[mapa_estructura == 1] = COSTO_INFINITO
+
+from heapq import heappush, heappop
+
+def heuristica(a, b):
+    return ((a[0]-b[0])**2 + (a[1]-b[1])**2) ** 0.5
+
+def a_star_ponderado(mapa_costos, inicio, meta, paso=8):
+    filas, cols = mapa_costos.shape
+    abiertos = [(0, inicio)]
+    costo_acumulado = {inicio: 0}
+    padres = {inicio: None}
+    vecinos = [(-paso,0),(paso,0),(0,-paso),(0,paso),
+               (-paso,-paso),(paso,paso),(-paso,paso),(paso,-paso)]
+
+    while abiertos:
+        _, actual = heappop(abiertos)
+        if heuristica(actual, meta) < paso:
+            ruta = []
+            while actual:
+                ruta.append(actual)
+                actual = padres[actual]
+            return ruta[::-1]
+
+        for dx, dy in vecinos:
+            vecino = (actual[0]+dx, actual[1]+dy)
+            x, y = vecino
+            if 0 <= x < cols and 0 <= y < filas:
+                costo_celda = mapa_costos[y, x]
+                if costo_celda >= COSTO_INFINITO:
+                    continue
+                nuevo_costo = costo_acumulado[actual] + costo_celda
+                if vecino not in costo_acumulado or nuevo_costo < costo_acumulado[vecino]:
+                    costo_acumulado[vecino] = nuevo_costo
+                    prioridad = nuevo_costo + heuristica(vecino, meta)
+                    heappush(abiertos, (prioridad, vecino))
+                    padres[vecino] = actual
+    return None
+
+def simplificar_ruta(ruta, epsilon=6):
+    if len(ruta) < 3:
+        return ruta
+    puntos = np.array(ruta, dtype=np.float32).reshape((-1, 1, 2))
+    aprox = cv2.approxPolyDP(puntos, epsilon, False)
+    return [tuple(int(v) for v in p[0]) for p in aprox]
+
+celda 11
+
+NUM_RUTAS_DESEADAS = random.randint(2, 7)
+print(f"Rutas objetivo: {NUM_RUTAS_DESEADAS}")
+
+todos_los_puntos = puntos_libres + puntos_limitados
+puntos_limitados_set = set(puntos_limitados)
+
+puntos_disponibles = todos_los_puntos.copy()
+mapa_costos_dinamico = mapa_costos.copy()
+
+MARGEN_SEPARACION = 18   # más chico que antes (35), para no bloquear demasiado espacio
+RADIO_PROTEGIDO = 6
+INTENTOS_MAXIMOS = 60
+
+rutas_generadas = []
+intentos = 0
+
+while len(rutas_generadas) < NUM_RUTAS_DESEADAS and len(puntos_disponibles) >= 2 and intentos < INTENTOS_MAXIMOS:
+    intentos += 1
+
+    tam_grupo = random.randint(2, min(3, len(puntos_disponibles)))
+    grupo = random.sample(puntos_disponibles, tam_grupo)
+
+    if any(p in puntos_limitados_set for p in grupo) and len(grupo) > 2:
+        grupo = grupo[:2]
+
+    dibujo_ruta = []
+    vertices_reales = [grupo[0]]
+    punto_actual = grupo[0]
+    ruta_valida = True
+
+    for siguiente in grupo[1:]:
+        tramo = a_star_ponderado(mapa_costos_dinamico, punto_actual, siguiente, paso=8)
+        if tramo:
+            dibujo_ruta.extend(simplificar_ruta(tramo, epsilon=6))
+            vertices_reales.append(siguiente)
+            punto_actual = siguiente
+        else:
+            ruta_valida = False
+            break
+
+    if ruta_valida and len(vertices_reales) >= 2 and len(dibujo_ruta) >= 2:
+        rutas_generadas.append({"dibujo": dibujo_ruta, "vertices": vertices_reales})
+
+        # Estos puntos ya se usaron, no se vuelven a intentar en otra ruta
+        for p in grupo:
+            puntos_disponibles.remove(p)
+
+        # Sellar esta ruta en el mapa de costos
+        mascara_ruta = np.zeros((h, w), dtype=np.uint8)
+        for j in range(len(dibujo_ruta) - 1):
+            cv2.line(mascara_ruta, dibujo_ruta[j], dibujo_ruta[j+1], 1, thickness=2)
+
+        mascara_dilatada = cv2.dilate(mascara_ruta, np.ones((MARGEN_SEPARACION, MARGEN_SEPARACION), np.uint8))
+        mapa_costos_dinamico[mascara_dilatada == 1] = COSTO_INFINITO
+
+        # Proteger todos los puntos restantes para que ninguno quede encerrado
+        for (px, py) in todos_los_puntos:
+            y1, y2 = max(0, py - RADIO_PROTEGIDO), min(h, py + RADIO_PROTEGIDO)
+            x1, x2 = max(0, px - RADIO_PROTEGIDO), min(w, px + RADIO_PROTEGIDO)
+            mapa_costos_dinamico[y1:y2, x1:x2] = mapa_costos[y1:y2, x1:x2]
+    # Si falló, simplemente se descarta este intento y se prueba otra combinación al azar
+
+print(f"\nRutas generadas: {len(rutas_generadas)} de {NUM_RUTAS_DESEADAS} pedidas (en {intentos} intentos)")
+for idx, r in enumerate(rutas_generadas):
+    print(f"  Ruta {idx}: {len(r['vertices'])} vértices reales")
+
+Celda 12
+
+img_original = cv2.cvtColor(np.array(imagen), cv2.COLOR_RGB2BGR)
+overlay = img_original.copy()
+
+overlay[mapa_estructura == 1] = (255, 0, 0)
+overlay[mapa_seguro == 1] = (0, 255, 0)
+overlay[mapa_precaucion == 1] = (0, 255, 255)
+overlay[mapa_inseguro == 1] = (0, 0, 255)
+
+resultado = cv2.addWeighted(overlay, 0.3, img_original, 0.7, 0)
+
+colores_rutas = [
+    (255, 255, 255), (255, 0, 255), (0, 255, 255), (255, 128, 0),
+    (128, 0, 255), (0, 200, 100), (100, 100, 255)
+]
+
+for idx, ruta in enumerate(rutas_generadas):
+    color = colores_rutas[idx % len(colores_rutas)]
+    dibujo = ruta["dibujo"]
+    vertices = ruta["vertices"]
+
+    for i in range(len(dibujo) - 1):
+        cv2.line(resultado, dibujo[i], dibujo[i+1], color, 2)
+
+    for (x, y) in vertices:
+        cv2.circle(resultado, (x, y), 5, (0, 0, 0), -1)
+        cv2.circle(resultado, (x, y), 5, color, 2)
+
+cv2.imwrite("ruta_final.jpg", resultado)
+
+from google.colab.patches import cv2_imshow
+cv2_imshow(resultado)
