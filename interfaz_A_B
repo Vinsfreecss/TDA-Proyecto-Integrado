@@ -82,14 +82,16 @@ HTTP 200 OK + JSON de detección.
 - Detectar presencia y posición del gato.
 - Devolver el JSON de detección.
 
-## Estado actual
+## Estado actual:
 
 - Prueba PC → Frente B mediante curl: funcionando.
-- Endpoint /frame: funcionando.
-- Respuesta 200 OK: funcionando.
-- JSON de detección: funcionando.
-- Firmware ESP32-CAM: compila correctamente.
-- Prueba física ESP32-CAM → Frente B: pendiente.
+- Captura JPEG desde ESP32-CAM: funcionando.
+- Conexión Wi-Fi ESP32-CAM: funcionando.
+- POST /frame desde ESP32-CAM: funcionando.
+- Respuesta HTTP 200: validada.
+- Integración Frente A → Frente B: validada en red local.
+- Red Wi-Fi universitaria presentó restricciones de firewall.
+- Pruebas de actuadores PAN/TILT: pendientes de integración física.
 
 ## Pendientes
 
