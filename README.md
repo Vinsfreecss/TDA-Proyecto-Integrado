@@ -1,39 +1,71 @@
-# Frente A — ESP32-CAM y mecanismo PAN-TILT
+# Proyecto TDA — Sistema integrado ESP32-CAM, visión y planificación
 
-## Objetivo
-Diseñar e implementar el dispositivo físico encargado de capturar imágenes, comunicarse con el Frente B y ejecutar movimientos mediante un mecanismo PAN-TILT.
+## Descripción general
 
-## Hardware principal
-- ESP32-CAM AI-Thinker
-- Cámara OV2640
-- 2 servomotores SG90/MG90S
-- Módulo láser/emisor
-- Fuente externa de 5 V
-- Interruptor de paro de emergencia
-- Capacitor de desacoplo
+Este repositorio reúne el desarrollo e integración de los tres frentes del proyecto de Tecnología Digital Aplicada.
 
-## Asignación actual de GPIO
+El sistema combina captura de imágenes mediante una ESP32-CAM, procesamiento visual para detectar al gato y generación de rutas o decisiones de movimiento. Cada frente aborda una parte específica del sistema y se comunica con los demás mediante interfaces definidas.
 
-| Función | GPIO |
-|---|---:|
-| Servo PAN | 12 |
-| Servo TILT | 13 |
-| Láser / emisor | 4 |
+## Frentes del proyecto
 
-> GPIO 12 es un strapping pin, por lo que debe evitarse forzar un nivel incompatible durante el arranque.
+### Frente A — Dispositivo físico y actuadores
+
+Responsable de:
+
+- Captura de imágenes mediante ESP32-CAM y cámara OV2640.
+- Comunicación Wi-Fi con el Frente B.
+- Control del mecanismo PAN-TILT mediante servomotores.
+- Control del módulo láser/emisor.
+- Ejecución de órdenes provenientes del sistema.
+
+### Frente B — Detección y procesamiento visual
+
+Responsable de:
+
+- Recepción de imágenes JPEG desde el Frente A.
+- Detección del gato mediante YOLOv8.
+- Obtención de coordenadas normalizadas.
+- Estimación de dirección, velocidad y confianza.
+- Generación del JSON utilizado para la integración con los demás frentes.
+
+### Frente C — Análisis del entorno y planificación
+
+Responsable de:
+
+- Segmentación semántica del entorno.
+- Clasificación de zonas seguras, de precaución y restringidas.
+- Generación de puntos candidatos.
+- Construcción de mapas de costo.
+- Generación de rutas mediante A* ponderado.
+
+## Flujo general
+
+ESP32-CAM (Frente A)
+→ imagen JPEG
+→ Frente B
+→ detección y coordenadas
+→ Frente C
+→ planificación / decisión
+→ Frente A
+→ actuación mediante PAN-TILT
 
 ## Estado actual
 
-- [x] Diagrama eléctrico
-- [x] Lista de conexiones
-- [x] Firmware ESP32-CAM compila
-- [x] Captura JPEG
-- [x] Conexión Wi-Fi
-- [x] Envío HTTP POST al Frente B
-- [x] Recepción de JSON
-- [ ] Integración física PAN-TILT
-- [ ] Prueba de ambos servos
-- [ ] Control del láser
-- [ ] Paro de emergencia
-- [ ] Calibración coordenadas → ángulos
-- [ ] Recepción de órdenes finales
+- Captura JPEG mediante ESP32-CAM: validada.
+- Comunicación Frente A → Frente B: validada.
+- Procesamiento y detección en Frente B: implementado.
+- Segmentación y generación de rutas en Frente C: implementada.
+- Integración automática Frente B → Frente C: pendiente de validación.
+- Integración Frente C → Frente A: pendiente.
+- Control físico PAN-TILT: en desarrollo.
+
+## Organización del repositorio
+
+- `firmware/`: firmware correspondiente al Frente A.
+- `documentacion/`: documentación técnica e interfaces.
+- `documentacion/referencias_integracion/`: códigos de referencia desarrollados por los Frentes B y C.
+- `Primeros avances TDA.pdf`: material correspondiente a etapas iniciales del proyecto.
+
+## Nota
+
+El desarrollo principal de este repositorio corresponde al Frente A. Los códigos de los Frentes B y C se incorporan como referencia para documentar y validar la integración completa del sistema.
