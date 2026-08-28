@@ -17,4 +17,6 @@ Estas pruebas permitieron verificar dimensiones, puntos de montaje y compatibili
 
 ## Prototipo físico
 
-![Prototipo PAN-TILT](hardware/mecanismo_pan_tilt/evidencias/prototipo_con_laser.png)
+## Prototipo físico
+
+![Prototipo PAN-TILT](evidencias/prototipo_con_laser.png)
